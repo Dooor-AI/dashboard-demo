@@ -35,15 +35,16 @@ export async function POST(req: NextRequest) {
 
     let assistantContent: string;
 
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
       assistantContent =
-        'AI chat is not configured. Set the ANTHROPIC_API_KEY environment variable to enable AI responses.';
+        'AI chat is not configured. Set the GEMINI_API_KEY environment variable to enable AI responses.';
     } else {
       try {
-        const { default: Anthropic } = await import('@anthropic-ai/sdk');
-        const client = new Anthropic({ apiKey });
+        const { GoogleGenerativeAI } = await import('@google/generative-ai');
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
         const existingMessages = await prisma.chatMessage.findMany({
           where: { sessionId: session.id, id: { not: userMessage.id } },
@@ -51,27 +52,19 @@ export async function POST(req: NextRequest) {
         });
 
         const history = existingMessages.map((m) => ({
-          role: m.role as 'user' | 'assistant',
-          content: m.content,
+          role: m.role === 'user' ? 'user' as const : 'model' as const,
+          parts: [{ text: m.content }],
         }));
 
-        const response = await client.messages.create({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 1024,
-          system:
-            'You are a helpful AI assistant integrated into Dooor OS, an enterprise PaaS platform for AI governance and deployment. Be concise, technical, and professional.',
-          messages: [
-            ...history,
-            { role: 'user', content: message.trim() },
-          ],
+        const chat = model.startChat({
+          history,
+          systemInstruction: 'You are a helpful AI assistant integrated into Dooor OS, an enterprise PaaS platform for AI governance and deployment. Be concise, technical, and professional.',
         });
 
-        const textBlock = response.content.find((b) => b.type === 'text');
-        assistantContent = textBlock
-          ? textBlock.text
-          : 'I could not generate a response. Please try again.';
+        const result = await chat.sendMessage(message.trim());
+        assistantContent = result.response.text() || 'I could not generate a response. Please try again.';
       } catch (aiError) {
-        console.error('Anthropic API error:', aiError);
+        console.error('Gemini API error:', aiError);
         assistantContent =
           'There was an error communicating with the AI service. Please check your API key and try again.';
       }
