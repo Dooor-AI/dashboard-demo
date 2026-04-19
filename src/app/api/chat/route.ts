@@ -58,7 +58,10 @@ export async function POST(req: NextRequest) {
 
         const chat = model.startChat({
           history,
-          systemInstruction: 'You are a helpful AI assistant integrated into Dooor OS, an enterprise PaaS platform for AI governance and deployment. Be concise, technical, and professional.',
+          systemInstruction: {
+            role: 'user',
+            parts: [{ text: 'You are a helpful AI assistant integrated into Dooor OS, an enterprise PaaS platform for AI governance and deployment. Be concise, technical, and professional.' }],
+          },
         });
 
         const result = await chat.sendMessage(message.trim());
